@@ -1,4 +1,4 @@
-# OpenSHA NSHMP Shaded Artifacts
+# OpenSHA NSHMP-lib Shaded Artifacts
 
 This project builds shaded/ASM-transformed versions of [nshmp-lib](https://code.usgs.gov/ghsc/nshmp/nshmp-lib) (and the smaller `nshmp-gmm` subset) for use in OpenSHA projects. This removes confusion between similarly-named classes between the two projects (many `nshmp-lib` classes were originally copied and modified from OpenSHA).
 
@@ -56,7 +56,7 @@ org.opensha:opensha-nshmp-gmm:<version>
 org.opensha:opensha-nshmp-lib:<version>
 ```
 
-TODO: The publication block currently attaches the transformed binary jars only. Repository selection, signing, release credentials, source and Javadoc jars, license/notice metadata, and final dependency metadata should be completed as part of the OpenSHA publishing workflow before any real publication. Do not run publish tasks unless you are intentionally testing or completing that publishing workflow.
+_TODO: The publication block currently attaches the transformed binary jars only. Repository selection, signing, release credentials, source and Javadoc jars, license/notice metadata, and final dependency metadata should be completed as part of the OpenSHA publishing workflow before any real publication. Do not run publish tasks unless you are intentionally testing or completing that publishing workflow._
 
 ## Transformer Behavior
 
@@ -64,7 +64,7 @@ The transformer scans the full input jar before writing output, builds a complet
 
 For each jar:
 
-- All NSHMP class entries are written to their relocated paths.
+- All `gov/usgs/earthquake/nshmp/` class entries are written to their relocated paths.
 - Field names and method names are preserved.
 - Class attributes, annotations, generic signatures, nests, permitted subclasses, enclosing-method metadata, and inner-class metadata are remapped by ASM.
 - Ordinary non-class resources are copied.
@@ -97,7 +97,7 @@ For example:
 1.8.4-opensha.1
 ```
 
-Increment `transformRevision` when the transformation process, metadata, or packaging changes without changing the upstream NSHMP version.
+Increment `transformRevision` when the transformation process, metadata, or packaging changes without changing the upstream `nshmp-lib` version.
 
 ## Building Jars
 
@@ -114,7 +114,7 @@ build/transformed/opensha-nshmp-gmm-1.8.4-opensha.1.jar
 build/transformed/opensha-nshmp-lib-1.8.4-opensha.1.jar
 ```
 
-These tasks resolve the upstream NSHMP artifacts and transform only the selected input jars. Upstream dependencies are not embedded into the transformed jars.
+These tasks resolve the upstream `nshmp-lib` artifacts and transform only the selected input jars. Upstream dependencies are not embedded into the transformed jars.
 
 ## Validation
 
