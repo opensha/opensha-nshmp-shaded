@@ -54,6 +54,8 @@ class NshmpJarTransformerTest {
         assertTrue(entries.contains("org/opensha/nshmp/shaded/gmm/NshmpGmm.class"));
         assertTrue(entries.contains("org/opensha/nshmp/shaded/gmm/NshmpGmmInput$Builder.class"));
         assertTrue(entries.contains("com/example/Unrelated.class"));
+        assertTrue(entries.contains("META-INF/nshmp-lib/LICENSE.md"));
+        assertTrue(entries.contains("META-INF/nshmp-lib/DISCLAIMER.md"));
         assertFalse(entries.contains("META-INF/TEST.SF"));
     }
 

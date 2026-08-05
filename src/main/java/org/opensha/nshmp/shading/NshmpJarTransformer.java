@@ -54,6 +54,7 @@ public final class NshmpJarTransformer {
                 throw new IllegalStateException("Duplicate transformed jar entry: " + outputName);
             }
         }
+        addBundledMetadata(outputEntries);
 
         Files.createDirectories(outputJar.toAbsolutePath().getParent());
         try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(outputJar))) {
@@ -192,6 +193,24 @@ public final class NshmpJarTransformer {
                 || entryName.endsWith(".xml")
                 || entryName.endsWith(".json")
                 || entryName.endsWith(".txt");
+    }
+
+    private static void addBundledMetadata(Map<String, byte[]> outputEntries) throws IOException {
+        addBundledMetadata(outputEntries, "nshmp-lib/LICENSE.md", "META-INF/nshmp-lib/LICENSE.md");
+        addBundledMetadata(outputEntries, "nshmp-lib/DISCLAIMER.md", "META-INF/nshmp-lib/DISCLAIMER.md");
+    }
+
+    private static void addBundledMetadata(Map<String, byte[]> outputEntries, String resourceName, String outputName)
+            throws IOException {
+        try (InputStream in = NshmpJarTransformer.class.getClassLoader().getResourceAsStream(resourceName)) {
+            if (in == null) {
+                throw new IOException("Missing bundled metadata resource: " + resourceName);
+            }
+            byte[] previous = outputEntries.putIfAbsent(outputName, readAll(in));
+            if (previous != null) {
+                throw new IllegalStateException("Duplicate transformed jar entry: " + outputName);
+            }
+        }
     }
 
     record InputEntry(String name, byte[] bytes) {}

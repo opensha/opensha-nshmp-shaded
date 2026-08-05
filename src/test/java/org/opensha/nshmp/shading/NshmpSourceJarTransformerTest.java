@@ -104,6 +104,8 @@ class NshmpSourceJarTransformerTest {
         assertTrue(entries.contains("org/opensha/nshmp/shaded/gmm/NshmpGmmInput.java"));
         assertTrue(entries.contains("org/opensha/nshmp/shaded/calc/NshmpHazard.java"));
         assertTrue(entries.contains("org/opensha/nshmp/shaded/calc/NshmpCalcConfig.java"));
+        assertTrue(entries.contains("META-INF/nshmp-lib/LICENSE.md"));
+        assertTrue(entries.contains("META-INF/nshmp-lib/DISCLAIMER.md"));
         assertFalse(entries.contains("META-INF/TEST.RSA"));
     }
 

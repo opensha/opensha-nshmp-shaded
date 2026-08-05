@@ -56,9 +56,15 @@ org.opensha:opensha-nshmp-gmm:<version>
 org.opensha:opensha-nshmp-lib:<version>
 ```
 
-_TODO: The publication block currently attaches the transformed binary jars, transformed source jars, and generated Javadoc jars. Repository selection, signing, release credentials and final dependency metadata should be completed as part of the OpenSHA publishing workflow before any real publication. Do not run publish tasks unless you are intentionally testing or completing that publishing workflow._
+The publication block attaches the transformed binary jars, transformed source jars, and generated Javadoc jars. It also defines the shared POM metadata used by both the local file-based Maven test repository and any future remote Maven repository. The current metadata uses `org.opensha` coordinates, points to the `opensha-nshmp-shaded` project URL, identifies OpenSHA contributors as the placeholder developer entry, and declares the upstream NSHMP public-domain/CC0 license.
 
-POM metadata is configured once in the Gradle publication definitions. The same generated POMs are used whether publishing to the local file-based Maven test repository or to a future remote repository.
+Dependency metadata is deliberately limited to the external runtime libraries that the shaded artifacts still reference. `opensha-nshmp-gmm` declares Guava; `opensha-nshmp-lib` declares Guava and Gson. The shaded artifacts must not declare dependencies on the original unshaded `ghsc:nshmp-gmm` or `ghsc:nshmp-lib` artifacts.
+
+The transformed binary and source jars include copies of the upstream `nshmp-lib` license and disclaimer under `META-INF/nshmp-lib/`.
+
+`check` validates that the Guava and Gson versions configured for the shaded `opensha-nshmp-lib` POM still match the upstream `nshmp-lib` POM. This is intended to catch dependency metadata changes when upgrading `nshmpVersion`. The `opensha-nshmp-gmm` POM intentionally declares Guava even though the upstream `nshmp-gmm` POM is empty, because the GMM artifact bytecode directly references Guava classes.
+
+_TODO: Repository selection, signing, release credentials, and final release workflow should be completed as part of the OpenSHA publishing workflow before any real publication. Do not run publish tasks unless you are intentionally testing or completing that publishing workflow._
 
 ## Transformer Behavior
 
@@ -182,7 +188,9 @@ Run the standard verification suite:
 This runs:
 
 - `test`: unit tests for representative mappings, jar structure, resource rewriting, signature metadata removal, and class loading.
+- Jar structure tests also verify that the upstream `nshmp-lib` license and disclaimer are included in transformed binary and source jars.
 - `compileNshmpGmmTransformedSources` and `compileNshmpLibTransformedSources`: compile the transformed source trees to catch source-rewrite regressions before source or Javadoc jars are published.
+- `validateUpstreamLibDependencyMetadata`: verifies that the generated full-library POM dependency versions match the upstream `nshmp-lib` POM.
 - `validateGmmLibConsistency`: verifies that transformed classes common to the GMM-only and full-library jars are byte-for-byte identical.
 - `validateGmmEquivalence`: compares representative original and transformed GMM calculations for identical branch weights, means, and sigmas.
 

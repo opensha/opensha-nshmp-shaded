@@ -30,6 +30,7 @@ configurations {
     upstreamGmmRuntime
     upstreamLib
     upstreamLibSources
+    upstreamLibPom
     javadocRuntime
 }
 
@@ -37,6 +38,7 @@ configurations.upstreamGmm.transitive = false
 configurations.upstreamGmmSources.transitive = false
 configurations.upstreamLib.transitive = false
 configurations.upstreamLibSources.transitive = false
+configurations.upstreamLibPom.transitive = false
 
 dependencies {
     implementation "org.ow2.asm:asm:${asmVersion}"
@@ -49,6 +51,7 @@ dependencies {
     upstreamGmmRuntime "com.google.code.gson:gson:${gsonVersion}"
     upstreamLib "ghsc:nshmp-lib:${nshmpVersion}"
     upstreamLibSources "ghsc:nshmp-lib:${nshmpVersion}:sources"
+    upstreamLibPom "ghsc:nshmp-lib:${nshmpVersion}@pom"
     javadocRuntime "com.google.guava:guava:${guavaVersion}"
     javadocRuntime "com.google.code.gson:gson:${gsonVersion}"
 
@@ -220,7 +223,82 @@ tasks.register('validateGmmEquivalence', JavaExec) {
     mainClass = 'org.opensha.nshmp.shading.GmmEquivalenceCheck'
 }
 
-check.dependsOn 'validateGmmLibConsistency', 'validateGmmEquivalence', 'compileNshmpGmmTransformedSources', 'compileNshmpLibTransformedSources'
+tasks.register('validateUpstreamLibDependencyMetadata') {
+    group = 'verification'
+    description = 'Verifies that generated POM dependency versions match the upstream NSHMP library POM.'
+    inputs.files(configurations.upstreamLibPom)
+    doLast {
+        def expectedDependencies = [
+            'com.google.guava:guava': guavaVersion,
+            'com.google.code.gson:gson': gsonVersion
+        ]
+        def documentBuilderFactory = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+        documentBuilderFactory.setNamespaceAware(false)
+        def document = documentBuilderFactory.newDocumentBuilder().parse(configurations.upstreamLibPom.singleFile)
+        def dependencyNodes = document.getElementsByTagName('dependency')
+        def upstreamDependencies = [:]
+        for (int i = 0; i < dependencyNodes.length; i++) {
+            def dependency = dependencyNodes.item(i)
+            def groupId = dependency.getElementsByTagName('groupId').item(0).textContent
+            def artifactId = dependency.getElementsByTagName('artifactId').item(0).textContent
+            def version = dependency.getElementsByTagName('version').item(0).textContent
+            upstreamDependencies["${groupId}:${artifactId}"] = version
+        }
+        expectedDependencies.each { dependencyName, expectedVersion ->
+            def upstreamVersion = upstreamDependencies[dependencyName]
+            if (upstreamVersion != expectedVersion) {
+                throw new GradleException("Expected upstream ${dependencyName} ${expectedVersion}, but ${configurations.upstreamLibPom.singleFile.name} declares ${upstreamVersion ?: 'no dependency'}")
+            }
+        }
+    }
+}
+
+check.dependsOn 'validateGmmLibConsistency', 'validateGmmEquivalence', 'validateUpstreamLibDependencyMetadata', 'compileNshmpGmmTransformedSources', 'compileNshmpLibTransformedSources'
+
+def configureShadedNshmpPom = { MavenPom pom, String pomName, String pomDescription ->
+    pom.name = pomName
+    pom.description = pomDescription
+    pom.url = 'https://github.com/opensha/opensha-nshmp-shaded'
+    pom.licenses {
+        license {
+            name = 'CC0 1.0 Universal'
+            url = 'https://creativecommons.org/publicdomain/zero/1.0/legalcode'
+        }
+    }
+    pom.organization {
+        name = 'OpenSHA'
+        url = 'https://opensha.org'
+    }
+    pom.developers {
+        developer {
+            id = 'opensha'
+            name = 'OpenSHA contributors'
+            organization = 'OpenSHA'
+            organizationUrl = 'https://opensha.org'
+        }
+    }
+    pom.scm {
+        connection = 'scm:git:https://github.com/opensha/opensha-nshmp-shaded.git'
+        developerConnection = 'scm:git:https://github.com/opensha/opensha-nshmp-shaded.git'
+        url = 'https://github.com/opensha/opensha-nshmp-shaded'
+    }
+}
+
+def addPomDependency = { MavenPom pom, String dependencyGroup, String dependencyArtifact, String dependencyVersion ->
+    pom.withXml {
+        def dependenciesNode = asNode().dependencies
+        if (!dependenciesNode) {
+            dependenciesNode = asNode().appendNode('dependencies')
+        } else {
+            dependenciesNode = dependenciesNode[0]
+        }
+        def dependencyNode = dependenciesNode.appendNode('dependency')
+        dependencyNode.appendNode('groupId', dependencyGroup)
+        dependencyNode.appendNode('artifactId', dependencyArtifact)
+        dependencyNode.appendNode('version', dependencyVersion)
+        dependencyNode.appendNode('scope', 'compile')
+    }
+}
 
 // Draft publication metadata only. Do not run publish tasks during local testing.
 publishing {
@@ -241,8 +319,10 @@ publishing {
                 builtBy tasks.named('nshmpGmmJavadocJar')
             }
             pom {
-                name = 'OpenSHA Shaded NSHMP GMM'
-                description = 'ASM-relocated NSHMP GMM classes for OpenSHA.'
+                configureShadedNshmpPom(delegate,
+                    'OpenSHA Shaded NSHMP GMM',
+                    'ASM-relocated NSHMP GMM classes for OpenSHA. Classes from gov.usgs.earthquake.nshmp are relocated to org.opensha.nshmp.shaded and top-level class names are prefixed with Nshmp.')
+                addPomDependency(delegate, 'com.google.guava', 'guava', guavaVersion)
             }
         }
         openshaNshmpLib(MavenPublication) {
@@ -261,8 +341,11 @@ publishing {
                 builtBy tasks.named('nshmpLibJavadocJar')
             }
             pom {
-                name = 'OpenSHA Shaded NSHMP Library'
-                description = 'ASM-relocated full NSHMP library classes for OpenSHA.'
+                configureShadedNshmpPom(delegate,
+                    'OpenSHA Shaded NSHMP Library',
+                    'ASM-relocated full NSHMP library classes for OpenSHA. Classes from gov.usgs.earthquake.nshmp are relocated to org.opensha.nshmp.shaded and top-level class names are prefixed with Nshmp.')
+                addPomDependency(delegate, 'com.google.guava', 'guava', guavaVersion)
+                addPomDependency(delegate, 'com.google.code.gson', 'gson', gsonVersion)
             }
         }
     }
