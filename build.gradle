@@ -1,0 +1,149 @@
+plugins {
+    id 'java'
+    id 'application'
+    id 'maven-publish'
+}
+
+group = 'org.opensha'
+version = "${nshmpVersion}-opensha.${transformRevision}"
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+compileJava.options.encoding = 'UTF-8'
+compileTestJava.options.encoding = 'UTF-8'
+
+repositories {
+    mavenCentral()
+    maven {
+        url = 'https://code.usgs.gov/api/v4/groups/1352/-/packages/maven'
+        name = 'NSHMP GitLab Group'
+    }
+}
+
+configurations {
+    upstreamGmm
+    upstreamGmmRuntime
+    upstreamLib
+}
+
+configurations.upstreamGmm.transitive = false
+configurations.upstreamLib.transitive = false
+
+dependencies {
+    implementation "org.ow2.asm:asm:${asmVersion}"
+    implementation "org.ow2.asm:asm-commons:${asmVersion}"
+
+    upstreamGmm "ghsc:nshmp-gmm:${nshmpVersion}"
+    upstreamGmmRuntime "ghsc:nshmp-gmm:${nshmpVersion}"
+    upstreamGmmRuntime "com.google.guava:guava:${guavaVersion}"
+    upstreamGmmRuntime "com.google.code.gson:gson:${gsonVersion}"
+    upstreamLib "ghsc:nshmp-lib:${nshmpVersion}"
+
+    testImplementation platform("org.junit:junit-bom:${junitVersion}")
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation "org.ow2.asm:asm-tree:${asmVersion}"
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+application {
+    mainClass = 'org.opensha.nshmp.shading.NshmpJarTransformer'
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+}
+
+def transformedDir = layout.buildDirectory.dir('transformed')
+def gmmJarFile = transformedDir.map { it.file("opensha-nshmp-gmm-${version}.jar") }
+def libJarFile = transformedDir.map { it.file("opensha-nshmp-lib-${version}.jar") }
+
+tasks.register('transformNshmpGmmJar', JavaExec) {
+    group = 'build'
+    description = 'Transforms the upstream NSHMP GMM jar.'
+    dependsOn classes
+    inputs.files(configurations.upstreamGmm)
+    outputs.file(gmmJarFile)
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = application.mainClass
+    args configurations.upstreamGmm.singleFile.absolutePath, gmmJarFile.get().asFile.absolutePath
+}
+
+tasks.register('transformNshmpLibJar', JavaExec) {
+    group = 'build'
+    description = 'Transforms the upstream full NSHMP library jar.'
+    dependsOn classes
+    inputs.files(configurations.upstreamLib)
+    outputs.file(libJarFile)
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = application.mainClass
+    args configurations.upstreamLib.singleFile.absolutePath, libJarFile.get().asFile.absolutePath
+}
+
+tasks.register('copyShadedJarsForLocalTesting') {
+    group = 'distribution'
+    description = 'Copies transformed jars into sibling OpenSHA lib directories for flat-file testing.'
+    dependsOn 'transformNshmpGmmJar', 'transformNshmpLibJar'
+    doLast {
+        copy {
+            from gmmJarFile
+            into '../opensha/lib'
+        }
+        copy {
+            from libJarFile
+            into '../opensha-dev/lib'
+        }
+    }
+}
+
+tasks.register('validateGmmLibConsistency', JavaExec) {
+    group = 'verification'
+    description = 'Validates that transformed classes common to GMM and full jars are byte-for-byte identical.'
+    dependsOn 'transformNshmpGmmJar', 'transformNshmpLibJar'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'org.opensha.nshmp.shading.ShadedJarConsistencyCheck'
+    args gmmJarFile.get().asFile.absolutePath, libJarFile.get().asFile.absolutePath
+}
+
+tasks.register('validateGmmEquivalence', JavaExec) {
+    group = 'verification'
+    description = 'Compares representative original and transformed GMM calculations.'
+    dependsOn 'transformNshmpGmmJar'
+    classpath = sourceSets.main.runtimeClasspath + configurations.upstreamGmmRuntime + files(gmmJarFile)
+    mainClass = 'org.opensha.nshmp.shading.GmmEquivalenceCheck'
+}
+
+check.dependsOn 'validateGmmLibConsistency', 'validateGmmEquivalence'
+
+// Draft publication metadata only. Do not run publish tasks during local testing.
+publishing {
+    publications {
+        openshaNshmpGmm(MavenPublication) {
+            groupId = project.group
+            artifactId = 'opensha-nshmp-gmm'
+            version = project.version
+            artifact(gmmJarFile) {
+                builtBy 'transformNshmpGmmJar'
+            }
+            pom {
+                name = 'OpenSHA Shaded NSHMP GMM'
+                description = 'ASM-relocated NSHMP GMM classes for OpenSHA.'
+            }
+        }
+        openshaNshmpLib(MavenPublication) {
+            groupId = project.group
+            artifactId = 'opensha-nshmp-lib'
+            version = project.version
+            artifact(libJarFile) {
+                builtBy 'transformNshmpLibJar'
+            }
+            pom {
+                name = 'OpenSHA Shaded NSHMP Library'
+                description = 'ASM-relocated full NSHMP library classes for OpenSHA.'
+            }
+        }
+    }
+}
