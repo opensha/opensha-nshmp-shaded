@@ -58,6 +58,8 @@ org.opensha:opensha-nshmp-lib:<version>
 
 _TODO: The publication block currently attaches the transformed binary jars, transformed source jars, and generated Javadoc jars. Repository selection, signing, release credentials and final dependency metadata should be completed as part of the OpenSHA publishing workflow before any real publication. Do not run publish tasks unless you are intentionally testing or completing that publishing workflow._
 
+POM metadata is configured once in the Gradle publication definitions. The same generated POMs are used whether publishing to the local file-based Maven test repository or to a future remote repository.
+
 ## Transformer Behavior
 
 The transformer scans the full input jar before writing output, builds a complete source-to-target class map, and fails if two source classes map to the same target name.
@@ -185,27 +187,3 @@ This runs:
 - `validateGmmEquivalence`: compares representative original and transformed GMM calculations for identical branch weights, means, and sigmas.
 
 The validation tasks build and inspect jars under `build/transformed`. They do not copy jars into any consumer project.
-
-## Optional Sibling-Repo Copy
-
-For development workflows where this repository is checked out next to OpenSHA repositories:
-
-```text
-../opensha/
-../opensha-dev/
-```
-
-the copy task can place transformed binary jars into each repository's `lib/` directory:
-
-```bash
-./gradlew copyShadedJarsForLocalTesting
-```
-
-This writes:
-
-```text
-../opensha/lib/opensha-nshmp-gmm-1.8.4-opensha.1.jar
-../opensha-dev/lib/opensha-nshmp-lib-1.8.4-opensha.1.jar
-```
-
-This task is only a convenience for flat-file binary consumer testing. It relies on the sibling directories existing and is not required to build, validate, or publish the transformed artifacts. Flat-file jar dependencies generally do not give Gradle enough metadata to automatically associate source jars; use the local Maven testing workflow when source attachment matters.

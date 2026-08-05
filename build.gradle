@@ -203,22 +203,6 @@ tasks.register('nshmpLibJavadocJar', Jar) {
     from tasks.named('nshmpLibJavadoc')
 }
 
-tasks.register('copyShadedJarsForLocalTesting') {
-    group = 'distribution'
-    description = 'Copies transformed jars into sibling OpenSHA lib directories for flat-file testing.'
-    dependsOn 'transformNshmpGmmJar', 'transformNshmpLibJar'
-    doLast {
-        copy {
-            from gmmJarFile
-            into '../opensha/lib'
-        }
-        copy {
-            from libJarFile
-            into '../opensha-dev/lib'
-        }
-    }
-}
-
 tasks.register('validateGmmLibConsistency', JavaExec) {
     group = 'verification'
     description = 'Validates that transformed classes common to GMM and full jars are byte-for-byte identical.'
