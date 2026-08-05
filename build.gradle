@@ -30,6 +30,7 @@ configurations {
     upstreamGmmRuntime
     upstreamLib
     upstreamLibSources
+    javadocRuntime
 }
 
 configurations.upstreamGmm.transitive = false
@@ -48,6 +49,8 @@ dependencies {
     upstreamGmmRuntime "com.google.code.gson:gson:${gsonVersion}"
     upstreamLib "ghsc:nshmp-lib:${nshmpVersion}"
     upstreamLibSources "ghsc:nshmp-lib:${nshmpVersion}:sources"
+    javadocRuntime "com.google.guava:guava:${guavaVersion}"
+    javadocRuntime "com.google.code.gson:gson:${gsonVersion}"
 
     testImplementation platform("org.junit:junit-bom:${junitVersion}")
     testImplementation 'org.junit.jupiter:junit-jupiter'
@@ -68,12 +71,15 @@ def gmmJarFile = transformedDir.map { it.file("opensha-nshmp-gmm-${version}.jar"
 def libJarFile = transformedDir.map { it.file("opensha-nshmp-lib-${version}.jar") }
 def gmmSourcesJarFile = transformedDir.map { it.file("opensha-nshmp-gmm-${version}-sources.jar") }
 def libSourcesJarFile = transformedDir.map { it.file("opensha-nshmp-lib-${version}-sources.jar") }
+def gmmJavadocJarFile = transformedDir.map { it.file("opensha-nshmp-gmm-${version}-javadoc.jar") }
+def libJavadocJarFile = transformedDir.map { it.file("opensha-nshmp-lib-${version}-javadoc.jar") }
 
 tasks.register('transformNshmpGmmJar', JavaExec) {
     group = 'build'
     description = 'Transforms the upstream NSHMP GMM jar.'
     dependsOn classes
     inputs.files(configurations.upstreamGmm)
+    inputs.files(sourceSets.main.output)
     outputs.file(gmmJarFile)
     classpath = sourceSets.main.runtimeClasspath
     mainClass = application.mainClass
@@ -85,6 +91,7 @@ tasks.register('transformNshmpLibJar', JavaExec) {
     description = 'Transforms the upstream full NSHMP library jar.'
     dependsOn classes
     inputs.files(configurations.upstreamLib)
+    inputs.files(sourceSets.main.output)
     outputs.file(libJarFile)
     classpath = sourceSets.main.runtimeClasspath
     mainClass = application.mainClass
@@ -96,6 +103,7 @@ tasks.register('transformNshmpGmmSourcesJar', JavaExec) {
     description = 'Transforms the upstream NSHMP GMM sources jar.'
     dependsOn classes
     inputs.files(configurations.upstreamGmmSources)
+    inputs.files(sourceSets.main.output)
     outputs.file(gmmSourcesJarFile)
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'org.opensha.nshmp.shading.NshmpSourceJarTransformer'
@@ -107,10 +115,92 @@ tasks.register('transformNshmpLibSourcesJar', JavaExec) {
     description = 'Transforms the upstream full NSHMP library sources jar.'
     dependsOn classes
     inputs.files(configurations.upstreamLibSources)
+    inputs.files(sourceSets.main.output)
     outputs.file(libSourcesJarFile)
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'org.opensha.nshmp.shading.NshmpSourceJarTransformer'
     args configurations.upstreamLibSources.singleFile.absolutePath, libSourcesJarFile.get().asFile.absolutePath
+}
+
+tasks.register('unpackNshmpGmmSources', Sync) {
+    group = 'build'
+    description = 'Unpacks transformed NSHMP GMM sources for Javadoc generation.'
+    dependsOn 'transformNshmpGmmSourcesJar'
+    from { zipTree(gmmSourcesJarFile.get().asFile) }
+    include '**/*.java'
+    into layout.buildDirectory.dir('transformed-sources/gmm')
+}
+
+tasks.register('unpackNshmpLibSources', Sync) {
+    group = 'build'
+    description = 'Unpacks transformed full NSHMP library sources for Javadoc generation.'
+    dependsOn 'transformNshmpLibSourcesJar'
+    from { zipTree(libSourcesJarFile.get().asFile) }
+    include '**/*.java'
+    into layout.buildDirectory.dir('transformed-sources/lib')
+}
+
+def configureTransformedSourceCompile = { JavaCompile task, TaskProvider<Sync> unpackTask, String sourcesDir ->
+    task.group = 'verification'
+    task.dependsOn unpackTask
+    task.source = fileTree(layout.buildDirectory.dir("transformed-sources/${sourcesDir}")) {
+        include '**/*.java'
+    }
+    task.classpath = configurations.javadocRuntime
+    task.destinationDirectory = layout.buildDirectory.dir("classes/transformed-sources/${sourcesDir}")
+    task.options.encoding = 'UTF-8'
+}
+
+tasks.register('compileNshmpGmmTransformedSources', JavaCompile) {
+    description = 'Compiles transformed NSHMP GMM sources.'
+    configureTransformedSourceCompile(delegate, tasks.named('unpackNshmpGmmSources'), 'gmm')
+}
+
+tasks.register('compileNshmpLibTransformedSources', JavaCompile) {
+    description = 'Compiles transformed full NSHMP library sources.'
+    configureTransformedSourceCompile(delegate, tasks.named('unpackNshmpLibSources'), 'lib')
+}
+
+def configureTransformedJavadoc = { Javadoc task, TaskProvider<Sync> unpackTask, String docsDir ->
+    task.group = 'documentation'
+    task.dependsOn unpackTask
+    task.source = fileTree(layout.buildDirectory.dir("transformed-sources/${docsDir}")) {
+        include '**/*.java'
+    }
+    task.destinationDir = layout.buildDirectory.dir("docs/javadoc/${docsDir}").get().asFile
+    task.classpath = configurations.javadocRuntime
+    task.options.encoding = 'UTF-8'
+    task.options.docEncoding = 'UTF-8'
+    task.options.charSet = 'UTF-8'
+    task.options.addStringOption('Xdoclint:none', '-quiet')
+}
+
+tasks.register('nshmpGmmJavadoc', Javadoc) {
+    description = 'Generates Javadocs from transformed NSHMP GMM sources.'
+    configureTransformedJavadoc(delegate, tasks.named('unpackNshmpGmmSources'), 'gmm')
+}
+
+tasks.register('nshmpLibJavadoc', Javadoc) {
+    description = 'Generates Javadocs from transformed full NSHMP library sources.'
+    configureTransformedJavadoc(delegate, tasks.named('unpackNshmpLibSources'), 'lib')
+}
+
+tasks.register('nshmpGmmJavadocJar', Jar) {
+    group = 'build'
+    description = 'Packages transformed NSHMP GMM Javadocs.'
+    dependsOn 'nshmpGmmJavadoc'
+    archiveFileName = gmmJavadocJarFile.get().asFile.name
+    destinationDirectory = transformedDir
+    from tasks.named('nshmpGmmJavadoc')
+}
+
+tasks.register('nshmpLibJavadocJar', Jar) {
+    group = 'build'
+    description = 'Packages transformed full NSHMP library Javadocs.'
+    dependsOn 'nshmpLibJavadoc'
+    archiveFileName = libJavadocJarFile.get().asFile.name
+    destinationDirectory = transformedDir
+    from tasks.named('nshmpLibJavadoc')
 }
 
 tasks.register('copyShadedJarsForLocalTesting') {
@@ -146,7 +236,7 @@ tasks.register('validateGmmEquivalence', JavaExec) {
     mainClass = 'org.opensha.nshmp.shading.GmmEquivalenceCheck'
 }
 
-check.dependsOn 'validateGmmLibConsistency', 'validateGmmEquivalence'
+check.dependsOn 'validateGmmLibConsistency', 'validateGmmEquivalence', 'compileNshmpGmmTransformedSources', 'compileNshmpLibTransformedSources'
 
 // Draft publication metadata only. Do not run publish tasks during local testing.
 publishing {
@@ -161,6 +251,10 @@ publishing {
             artifact(gmmSourcesJarFile) {
                 classifier = 'sources'
                 builtBy tasks.named('transformNshmpGmmSourcesJar')
+            }
+            artifact(gmmJavadocJarFile) {
+                classifier = 'javadoc'
+                builtBy tasks.named('nshmpGmmJavadocJar')
             }
             pom {
                 name = 'OpenSHA Shaded NSHMP GMM'
@@ -178,6 +272,10 @@ publishing {
                 classifier = 'sources'
                 builtBy tasks.named('transformNshmpLibSourcesJar')
             }
+            artifact(libJavadocJarFile) {
+                classifier = 'javadoc'
+                builtBy tasks.named('nshmpLibJavadocJar')
+            }
             pom {
                 name = 'OpenSHA Shaded NSHMP Library'
                 description = 'ASM-relocated full NSHMP library classes for OpenSHA.'
@@ -194,6 +292,6 @@ publishing {
 
 tasks.register('publishToLocalTestMaven') {
     group = 'publishing'
-    description = 'Publishes transformed binary and source jars to build/local-maven for local consumer testing.'
+    description = 'Publishes transformed binary, source, and Javadoc jars to build/local-maven for local consumer testing.'
     dependsOn 'publishAllPublicationsToLocalTestRepository'
 }

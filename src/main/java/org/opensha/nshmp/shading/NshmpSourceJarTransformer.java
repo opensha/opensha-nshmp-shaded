@@ -26,6 +26,7 @@ public final class NshmpSourceJarTransformer {
     private static final Pattern NSHMP_IMPORT = Pattern.compile(
             "^\\s*import\\s+(?:static\\s+)?(gov\\.usgs\\.earthquake\\.nshmp(?:\\.[A-Za-z_$][\\w$]*)+)",
             Pattern.MULTILINE);
+    private static final Pattern TYPE_DECLARATION = Pattern.compile("\\b(?:class|interface|enum|record)\\s+([A-Za-z_$][\\w$]*)\\b");
 
     public static void main(String[] args) throws IOException {
         if (args.length != 2) {
@@ -139,7 +140,7 @@ public final class NshmpSourceJarTransformer {
         text = text.replace("gov.usgs.earthquake.nshmp", "org.opensha.nshmp.shaded");
 
         for (Map.Entry<String, String> replacement : simpleNameReplacements(entryName, bytes, sourceMap).entrySet()) {
-            text = text.replaceAll("\\b" + Pattern.quote(replacement.getKey()) + "\\b", replacement.getValue());
+            text = text.replaceAll("(?<!\\.)\\b" + Pattern.quote(replacement.getKey()) + "\\b", replacement.getValue());
         }
 
         return text.getBytes(StandardCharsets.UTF_8);
@@ -164,6 +165,7 @@ public final class NshmpSourceJarTransformer {
         }
 
         String originalText = new String(bytes, StandardCharsets.UTF_8);
+        declaredNestedTypeNames(originalText).forEach(replacements::remove);
         Matcher matcher = NSHMP_IMPORT.matcher(originalText);
         while (matcher.find()) {
             String candidate = NshmpNameMapper.classNameToInternal(matcher.group(1));
@@ -178,6 +180,28 @@ public final class NshmpSourceJarTransformer {
         }
 
         return replacements;
+    }
+
+    private static List<String> declaredNestedTypeNames(String text) {
+        List<String> nestedNames = new ArrayList<>();
+        int depth = 0;
+        for (String line : text.split("\\R")) {
+            Matcher matcher = TYPE_DECLARATION.matcher(line);
+            while (matcher.find()) {
+                if (depth > 0) {
+                    nestedNames.add(matcher.group(1));
+                }
+            }
+            for (int i = 0; i < line.length(); i++) {
+                char c = line.charAt(i);
+                if (c == '{') {
+                    depth++;
+                } else if (c == '}' && depth > 0) {
+                    depth--;
+                }
+            }
+        }
+        return nestedNames;
     }
 
     private static String simpleName(String internalName) {

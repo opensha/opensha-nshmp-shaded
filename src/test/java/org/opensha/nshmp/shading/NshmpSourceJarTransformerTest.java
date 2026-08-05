@@ -51,6 +51,24 @@ class NshmpSourceJarTransformerTest {
 
                     public class Site {}
                     """);
+            writeEntry(out, "gov/usgs/earthquake/nshmp/calc/Hazard.java", """
+                    package gov.usgs.earthquake.nshmp.calc;
+
+                    public class Hazard {}
+                    """);
+            writeEntry(out, "gov/usgs/earthquake/nshmp/calc/CalcConfig.java", """
+                    package gov.usgs.earthquake.nshmp.calc;
+
+                    public class CalcConfig {
+                      /**
+                       * @see gov.usgs.earthquake.nshmp.calc.CalcConfig.Hazard#imts
+                       */
+                      public void imts() {}
+                      public static class Hazard {
+                        Object imts;
+                      }
+                    }
+                    """);
             writeEntry(out, "gov/usgs/earthquake/nshmp/model/Rupture.java", """
                     package gov.usgs.earthquake.nshmp.model;
 
@@ -74,11 +92,18 @@ class NshmpSourceJarTransformerTest {
             assertTrue(gmmInput.contains("import org.opensha.nshmp.shaded.model.NshmpRupture;"));
             assertTrue(gmmInput.contains("public class NshmpGmmInput"));
             assertTrue(gmmInput.contains("NshmpRupture rupture;"));
+            String calcConfig = new String(jar.getInputStream(
+                    jar.getEntry("org/opensha/nshmp/shaded/calc/NshmpCalcConfig.java")).readAllBytes(), StandardCharsets.UTF_8);
+            assertTrue(calcConfig.contains("@see org.opensha.nshmp.shaded.calc.NshmpCalcConfig.Hazard#imts"));
+            assertTrue(calcConfig.contains("public static class Hazard"));
+            assertFalse(calcConfig.contains("public static class NshmpHazard"));
         }
 
         assertFalse(entries.contains("gov/usgs/earthquake/nshmp/gmm/Gmm.java"));
         assertTrue(entries.contains("org/opensha/nshmp/shaded/gmm/NshmpGmm.java"));
         assertTrue(entries.contains("org/opensha/nshmp/shaded/gmm/NshmpGmmInput.java"));
+        assertTrue(entries.contains("org/opensha/nshmp/shaded/calc/NshmpHazard.java"));
+        assertTrue(entries.contains("org/opensha/nshmp/shaded/calc/NshmpCalcConfig.java"));
         assertFalse(entries.contains("META-INF/TEST.RSA"));
     }
 

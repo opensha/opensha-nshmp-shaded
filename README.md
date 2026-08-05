@@ -56,7 +56,7 @@ org.opensha:opensha-nshmp-gmm:<version>
 org.opensha:opensha-nshmp-lib:<version>
 ```
 
-_TODO: The publication block currently attaches the transformed binary jars and transformed source jars only. Repository selection, signing, release credentials and final dependency metadata should be completed as part of the OpenSHA publishing workflow before any real publication. Do not run publish tasks unless you are intentionally testing or completing that publishing workflow._
+_TODO: The publication block currently attaches the transformed binary jars, transformed source jars, and generated Javadoc jars. Repository selection, signing, release credentials and final dependency metadata should be completed as part of the OpenSHA publishing workflow before any real publication. Do not run publish tasks unless you are intentionally testing or completing that publishing workflow._
 
 ## Transformer Behavior
 
@@ -77,6 +77,8 @@ For each jar:
 `module-info.class` under the NSHMP package is treated as unsupported and fails explicitly.
 
 Source jars are transformed separately with the same naming policy. Java source paths are relocated and top-level `.java` filenames are prefixed with `Nshmp`; package declarations, imports, fully-qualified references, static imports, and same-package NSHMP type references are rewritten to match the shaded bytecode. The transformed source jars are intended for IDE source navigation once these artifacts are published through Maven metadata.
+
+Javadocs are generated from the transformed sources and packaged as Maven `javadoc` classifier jars. Doclint is disabled for this generation so upstream documentation warnings do not block artifact creation.
 
 ## Versioning
 
@@ -131,9 +133,22 @@ build/transformed/opensha-nshmp-gmm-1.8.4-opensha.1-sources.jar
 build/transformed/opensha-nshmp-lib-1.8.4-opensha.1-sources.jar
 ```
 
+Build generated Javadoc jars:
+
+```bash
+./gradlew nshmpGmmJavadocJar nshmpLibJavadocJar
+```
+
+This writes:
+
+```text
+build/transformed/opensha-nshmp-gmm-1.8.4-opensha.1-javadoc.jar
+build/transformed/opensha-nshmp-lib-1.8.4-opensha.1-javadoc.jar
+```
+
 ## Local Maven Testing
 
-Publish the transformed binary and source jars to a local file-based Maven repository:
+Publish the transformed binary, source, and Javadoc jars to a local file-based Maven repository:
 
 ```bash
 ./gradlew publishToLocalTestMaven
@@ -165,6 +180,7 @@ Run the standard verification suite:
 This runs:
 
 - `test`: unit tests for representative mappings, jar structure, resource rewriting, signature metadata removal, and class loading.
+- `compileNshmpGmmTransformedSources` and `compileNshmpLibTransformedSources`: compile the transformed source trees to catch source-rewrite regressions before source or Javadoc jars are published.
 - `validateGmmLibConsistency`: verifies that transformed classes common to the GMM-only and full-library jars are byte-for-byte identical.
 - `validateGmmEquivalence`: compares representative original and transformed GMM calculations for identical branch weights, means, and sigmas.
 
