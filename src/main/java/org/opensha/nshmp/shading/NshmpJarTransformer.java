@@ -21,6 +21,7 @@ import java.util.jar.JarOutputStream;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.commons.ClassRemapper;
 
 public final class NshmpJarTransformer {
@@ -132,9 +133,43 @@ public final class NshmpJarTransformer {
     private static byte[] transformClass(byte[] bytes, NshmpRemapper remapper) {
         ClassReader reader = new ClassReader(bytes);
         ClassWriter writer = new ClassWriter(reader, 0);
-        ClassVisitor visitor = new ClassRemapper(writer, remapper);
+        ClassVisitor visitor = new SourceFileRemapper(new ClassRemapper(writer, remapper), reader.getClassName(), remapper);
         reader.accept(visitor, 0);
         return writer.toByteArray();
+    }
+
+    private static final class SourceFileRemapper extends ClassVisitor {
+
+        private final String internalName;
+        private final NshmpRemapper remapper;
+
+        private SourceFileRemapper(ClassVisitor classVisitor, String internalName, NshmpRemapper remapper) {
+            super(Opcodes.ASM9, classVisitor);
+            this.internalName = internalName;
+            this.remapper = remapper;
+        }
+
+        @Override
+        public void visitSource(String source, String debug) {
+            super.visitSource(mapSourceFile(source), debug);
+        }
+
+        private String mapSourceFile(String source) {
+            if (source == null || !NshmpNameMapper.isNshmpClass(internalName)) {
+                return source;
+            }
+            String simpleName = internalName.substring(internalName.lastIndexOf('/') + 1);
+            int nestedAt = simpleName.indexOf('$');
+            String outer = nestedAt >= 0 ? simpleName.substring(0, nestedAt) : simpleName;
+            if (!source.equals(outer + ".java")) {
+                return source;
+            }
+            String mapped = remapper.map(internalName);
+            String mappedSimpleName = mapped.substring(mapped.lastIndexOf('/') + 1);
+            int mappedNestedAt = mappedSimpleName.indexOf('$');
+            String mappedOuter = mappedNestedAt >= 0 ? mappedSimpleName.substring(0, mappedNestedAt) : mappedSimpleName;
+            return mappedOuter + ".java";
+        }
     }
 
     private static byte[] transformResource(String entryName, byte[] bytes, Map<String, String> classMap) {

@@ -56,7 +56,7 @@ org.opensha:opensha-nshmp-gmm:<version>
 org.opensha:opensha-nshmp-lib:<version>
 ```
 
-_TODO: The publication block currently attaches the transformed binary jars only. Repository selection, signing, release credentials, source and Javadoc jars, license/notice metadata, and final dependency metadata should be completed as part of the OpenSHA publishing workflow before any real publication. Do not run publish tasks unless you are intentionally testing or completing that publishing workflow._
+_TODO: The publication block currently attaches the transformed binary jars and transformed source jars only. Repository selection, signing, release credentials and final dependency metadata should be completed as part of the OpenSHA publishing workflow before any real publication. Do not run publish tasks unless you are intentionally testing or completing that publishing workflow._
 
 ## Transformer Behavior
 
@@ -75,6 +75,8 @@ For each jar:
 
 `package-info.class` is relocated without an added `Nshmp` class prefix.
 `module-info.class` under the NSHMP package is treated as unsupported and fails explicitly.
+
+Source jars are transformed separately with the same naming policy. Java source paths are relocated and top-level `.java` filenames are prefixed with `Nshmp`; package declarations, imports, fully-qualified references, static imports, and same-package NSHMP type references are rewritten to match the shaded bytecode. The transformed source jars are intended for IDE source navigation once these artifacts are published through Maven metadata.
 
 ## Versioning
 
@@ -116,6 +118,42 @@ build/transformed/opensha-nshmp-lib-1.8.4-opensha.1.jar
 
 These tasks resolve the upstream `nshmp-lib` artifacts and transform only the selected input jars. Upstream dependencies are not embedded into the transformed jars.
 
+Build transformed source jars:
+
+```bash
+./gradlew transformNshmpGmmSourcesJar transformNshmpLibSourcesJar
+```
+
+This writes:
+
+```text
+build/transformed/opensha-nshmp-gmm-1.8.4-opensha.1-sources.jar
+build/transformed/opensha-nshmp-lib-1.8.4-opensha.1-sources.jar
+```
+
+## Local Maven Testing
+
+Publish the transformed binary and source jars to a local file-based Maven repository:
+
+```bash
+./gradlew publishToLocalTestMaven
+```
+
+This writes Maven metadata and artifacts under:
+
+```text
+build/local-maven/
+```
+
+Sibling OpenSHA checkouts can then resolve the shaded artifacts by Maven coordinates from this local repository:
+
+```text
+org.opensha:opensha-nshmp-gmm:1.8.4-opensha.1
+org.opensha:opensha-nshmp-lib:1.8.4-opensha.1
+```
+
+This is the preferred local test workflow when you want Gradle and IDE tooling to discover the transformed `-sources.jar` files before the artifacts are published to a remote Maven repository.
+
 ## Validation
 
 Run the standard verification suite:
@@ -141,7 +179,7 @@ For development workflows where this repository is checked out next to OpenSHA r
 ../opensha-dev/
 ```
 
-the copy task can place transformed jars into each repository's `lib/` directory:
+the copy task can place transformed binary jars into each repository's `lib/` directory:
 
 ```bash
 ./gradlew copyShadedJarsForLocalTesting
@@ -154,4 +192,4 @@ This writes:
 ../opensha-dev/lib/opensha-nshmp-lib-1.8.4-opensha.1.jar
 ```
 
-This task is only a convenience for flat-file consumer testing. It relies on the sibling directories existing and is not required to build, validate, or publish the transformed artifacts.
+This task is only a convenience for flat-file binary consumer testing. It relies on the sibling directories existing and is not required to build, validate, or publish the transformed artifacts. Flat-file jar dependencies generally do not give Gradle enough metadata to automatically associate source jars; use the local Maven testing workflow when source attachment matters.

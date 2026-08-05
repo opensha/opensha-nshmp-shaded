@@ -13,8 +13,10 @@ import java.util.jar.JarFile;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.tree.ClassNode;
 
 class NshmpJarTransformerTest {
 
@@ -27,6 +29,7 @@ class NshmpJarTransformerTest {
         var output = tempDir.resolve("output.jar");
         try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(input))) {
             writeClass(out, "gov/usgs/earthquake/nshmp/gmm/Gmm");
+            writeClass(out, "gov/usgs/earthquake/nshmp/gmm/GmmInput", "GmmInput.java");
             writeClass(out, "gov/usgs/earthquake/nshmp/gmm/GmmInput$Builder");
             writeClass(out, "com/example/Unrelated");
             writeEntry(out, "META-INF/TEST.SF", "invalid");
@@ -43,6 +46,8 @@ class NshmpJarTransformerTest {
             }
             String services = new String(jar.getInputStream(jar.getEntry("META-INF/services/example.Service")).readAllBytes());
             assertTrue(services.contains("org.opensha.nshmp.shaded.gmm.NshmpGmm"));
+            assertSourceFile(jar, "org/opensha/nshmp/shaded/gmm/NshmpGmmInput.class", "NshmpGmmInput.java");
+            assertSourceFile(jar, "org/opensha/nshmp/shaded/gmm/NshmpGmmInput$Builder.class", "NshmpGmmInput.java");
         }
 
         assertFalse(entries.contains("gov/usgs/earthquake/nshmp/gmm/Gmm.class"));
@@ -53,10 +58,24 @@ class NshmpJarTransformerTest {
     }
 
     private static void writeClass(JarOutputStream out, String internalName) throws IOException {
+        String simpleName = internalName.substring(internalName.lastIndexOf('/') + 1);
+        int nestedAt = simpleName.indexOf('$');
+        String sourceFile = (nestedAt >= 0 ? simpleName.substring(0, nestedAt) : simpleName) + ".java";
+        writeClass(out, internalName, sourceFile);
+    }
+
+    private static void writeClass(JarOutputStream out, String internalName, String sourceFile) throws IOException {
         ClassWriter writer = new ClassWriter(0);
         writer.visit(Opcodes.V17, Opcodes.ACC_PUBLIC, internalName, null, "java/lang/Object", null);
+        writer.visitSource(sourceFile, null);
         writer.visitEnd();
         writeEntry(out, internalName + ".class", writer.toByteArray());
+    }
+
+    private static void assertSourceFile(JarFile jar, String entryName, String sourceFile) throws IOException {
+        ClassNode node = new ClassNode();
+        new ClassReader(jar.getInputStream(jar.getEntry(entryName)).readAllBytes()).accept(node, 0);
+        assertTrue(sourceFile.equals(node.sourceFile), "Expected " + entryName + " sourceFile to be " + sourceFile);
     }
 
     private static void writeEntry(JarOutputStream out, String name, String text) throws IOException {

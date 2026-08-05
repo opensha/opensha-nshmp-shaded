@@ -26,22 +26,28 @@ repositories {
 
 configurations {
     upstreamGmm
+    upstreamGmmSources
     upstreamGmmRuntime
     upstreamLib
+    upstreamLibSources
 }
 
 configurations.upstreamGmm.transitive = false
+configurations.upstreamGmmSources.transitive = false
 configurations.upstreamLib.transitive = false
+configurations.upstreamLibSources.transitive = false
 
 dependencies {
     implementation "org.ow2.asm:asm:${asmVersion}"
     implementation "org.ow2.asm:asm-commons:${asmVersion}"
 
     upstreamGmm "ghsc:nshmp-gmm:${nshmpVersion}"
+    upstreamGmmSources "ghsc:nshmp-gmm:${nshmpVersion}:sources"
     upstreamGmmRuntime "ghsc:nshmp-gmm:${nshmpVersion}"
     upstreamGmmRuntime "com.google.guava:guava:${guavaVersion}"
     upstreamGmmRuntime "com.google.code.gson:gson:${gsonVersion}"
     upstreamLib "ghsc:nshmp-lib:${nshmpVersion}"
+    upstreamLibSources "ghsc:nshmp-lib:${nshmpVersion}:sources"
 
     testImplementation platform("org.junit:junit-bom:${junitVersion}")
     testImplementation 'org.junit.jupiter:junit-jupiter'
@@ -60,6 +66,8 @@ tasks.withType(Test).configureEach {
 def transformedDir = layout.buildDirectory.dir('transformed')
 def gmmJarFile = transformedDir.map { it.file("opensha-nshmp-gmm-${version}.jar") }
 def libJarFile = transformedDir.map { it.file("opensha-nshmp-lib-${version}.jar") }
+def gmmSourcesJarFile = transformedDir.map { it.file("opensha-nshmp-gmm-${version}-sources.jar") }
+def libSourcesJarFile = transformedDir.map { it.file("opensha-nshmp-lib-${version}-sources.jar") }
 
 tasks.register('transformNshmpGmmJar', JavaExec) {
     group = 'build'
@@ -81,6 +89,28 @@ tasks.register('transformNshmpLibJar', JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
     mainClass = application.mainClass
     args configurations.upstreamLib.singleFile.absolutePath, libJarFile.get().asFile.absolutePath
+}
+
+tasks.register('transformNshmpGmmSourcesJar', JavaExec) {
+    group = 'build'
+    description = 'Transforms the upstream NSHMP GMM sources jar.'
+    dependsOn classes
+    inputs.files(configurations.upstreamGmmSources)
+    outputs.file(gmmSourcesJarFile)
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'org.opensha.nshmp.shading.NshmpSourceJarTransformer'
+    args configurations.upstreamGmmSources.singleFile.absolutePath, gmmSourcesJarFile.get().asFile.absolutePath
+}
+
+tasks.register('transformNshmpLibSourcesJar', JavaExec) {
+    group = 'build'
+    description = 'Transforms the upstream full NSHMP library sources jar.'
+    dependsOn classes
+    inputs.files(configurations.upstreamLibSources)
+    outputs.file(libSourcesJarFile)
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'org.opensha.nshmp.shading.NshmpSourceJarTransformer'
+    args configurations.upstreamLibSources.singleFile.absolutePath, libSourcesJarFile.get().asFile.absolutePath
 }
 
 tasks.register('copyShadedJarsForLocalTesting') {
@@ -126,7 +156,11 @@ publishing {
             artifactId = 'opensha-nshmp-gmm'
             version = project.version
             artifact(gmmJarFile) {
-                builtBy 'transformNshmpGmmJar'
+                builtBy tasks.named('transformNshmpGmmJar')
+            }
+            artifact(gmmSourcesJarFile) {
+                classifier = 'sources'
+                builtBy tasks.named('transformNshmpGmmSourcesJar')
             }
             pom {
                 name = 'OpenSHA Shaded NSHMP GMM'
@@ -138,7 +172,11 @@ publishing {
             artifactId = 'opensha-nshmp-lib'
             version = project.version
             artifact(libJarFile) {
-                builtBy 'transformNshmpLibJar'
+                builtBy tasks.named('transformNshmpLibJar')
+            }
+            artifact(libSourcesJarFile) {
+                classifier = 'sources'
+                builtBy tasks.named('transformNshmpLibSourcesJar')
             }
             pom {
                 name = 'OpenSHA Shaded NSHMP Library'
@@ -146,4 +184,16 @@ publishing {
             }
         }
     }
+    repositories {
+        maven {
+            name = 'localTest'
+            url = layout.buildDirectory.dir('local-maven')
+        }
+    }
+}
+
+tasks.register('publishToLocalTestMaven') {
+    group = 'publishing'
+    description = 'Publishes transformed binary and source jars to build/local-maven for local consumer testing.'
+    dependsOn 'publishAllPublicationsToLocalTestRepository'
 }
